@@ -41,13 +41,18 @@ public class NordPoolService : INordPoolService
         return _cache.GetOrCreateAsync(nameof(GetPrices), async entry =>
         {
             var root = await GetRoot();
-            var regions = new List<Region>();
+            var regions = new Dictionary<string, Region>();
             foreach (var row in root.data.Rows)
             {
                 var grouped = row.Columns.GroupBy(x => x.Name);
                 foreach (var group in grouped)
                 {
-                    var region = new Region { Name = group.Key };
+                    if (!regions.TryGetValue(group.Key, out var region))
+                    {
+                        region = new Region { Name = group.Key };
+                        regions.Add(group.Key, region);
+                    }                   
+
                     foreach (var column in group)
                     {
                         double.TryParse(column.Value, out var price);
@@ -59,7 +64,7 @@ public class NordPoolService : INordPoolService
             var expiration = CalculateExpirationDate();
             entry.SetAbsoluteExpiration(expiration);
 
-            return regions;
+            return regions.Values.ToList();
         });
     }
 
