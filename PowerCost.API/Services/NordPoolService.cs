@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using PowerCost.API.Models.NordPool;
 using PowerCost.API.Models.Prices;
+using System.Diagnostics;
+using System.Globalization;
 
 namespace PowerCost.API.Services;
 
@@ -51,11 +53,11 @@ public class NordPoolService : INordPoolService
                     {
                         region = new Region { Name = group.Key };
                         regions.Add(group.Key, region);
-                    }                   
+                    }
 
                     foreach (var column in group)
                     {
-                        double.TryParse(column.Value, out var price);
+                        double.TryParse(column.Value, NumberStyles.Number, CultureInfo.GetCultureInfo("nb-NO"), out var price);
                         var kwhPrice = Math.Round(price / 1000, 3);
                         region.Prices.Add(new Price { StartTime = row.StartTime, EndTime = row.EndTime, Value = kwhPrice, });
                     }
@@ -73,5 +75,71 @@ public class NordPoolService : INordPoolService
         var result = await _httpClient.GetFromJsonAsync<Root>("https://www.nordpoolgroup.com/api/marketdata/page/23?currency=NOK");
         ArgumentNullException.ThrowIfNull(result);
         return result;
+    }
+
+    public async Task<Price> GetCurrentPriceForRegion(string region)
+    {
+        var prices = await GetPrices();
+        ArgumentNullException.ThrowIfNull(prices);
+
+        var regionPrices = prices.FirstOrDefault(x => x.Name == region);
+        ArgumentNullException.ThrowIfNull(regionPrices);
+
+        return regionPrices.Prices.First();
+    }
+
+    public async Task<List<Price>> GetPricesForRegion(string region)
+    {
+        var prices = await GetPrices();
+        ArgumentNullException.ThrowIfNull(prices);
+
+        var regionPrices = prices.FirstOrDefault(x => x.Name == region);
+        ArgumentNullException.ThrowIfNull(regionPrices);
+
+        return regionPrices.Prices;
+    }
+
+    public async Task<Period> GetCheapestContinuousPeriodForRegion(string region, int hours)
+    {
+        var prices = await GetPricesForRegion(region);
+        return GetCheapestContinuousPeriodForRegion(prices, hours);
+    }
+
+    public Period GetCheapestContinuousPeriodForRegion(List<Price> prices, int hours)
+    {
+        var periods = GetPeriodPrices(prices, hours);
+        return periods.MinBy(x => x.Key).Value;
+    }
+
+    public List<KeyValuePair<double, Period>> GetPeriodPrices(List<Price> prices, int hours)
+    {
+        var sums = new List<KeyValuePair<double, Period>>();
+        for (int i = 0; i < prices.Count; i++)
+        {
+            var remaining = prices.Count - i;
+            if (remaining < hours)
+                continue;
+
+            var priceGroup = prices.GetRange(i, hours);
+            var endTime = priceGroup.Max(x => x.EndTime);
+            var startTime = priceGroup.Min(x => x.EndTime).AddHours(-1);
+            var period = new Period { Start = startTime, End = endTime };
+            var sum = priceGroup.Sum(x => x.Value);
+            sums.Add(new KeyValuePair<double, Period>(sum, period));
+        }
+        return sums;
+    }
+
+    public async Task<Period> GetCostliestContinuousPeriodForRegion(string region, int hours)
+    {
+        var prices = await GetPricesForRegion(region);
+        var periods = GetPeriodPrices(prices, hours);
+        return periods.MaxBy(x => x.Key).Value;
+    }
+
+    public Period GetCostliestContinuousPeriodForRegion(List<Price> prices, int hours)
+{
+        var periods = GetPeriodPrices(prices, hours);
+        return periods.MaxBy(x => x.Key).Value;
     }
 }

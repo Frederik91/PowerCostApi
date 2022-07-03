@@ -25,10 +25,35 @@ app.MapGet("/regions", (INordPoolService nordPoolService) =>
     return nordPoolService.GetRegions();
 })
 .WithName("GetRegions");
+
 app.MapGet("/prices", (INordPoolService nordPoolService) =>
 {
     return nordPoolService.GetPrices();
 })
 .WithName("GetPrices");
+
+app.MapGet("/regions/{region}/prices", (string region, INordPoolService nordPoolService) =>
+{
+    return nordPoolService.GetPricesForRegion(region);
+})
+    .WithName("Get all prices for region");
+
+app.MapGet("/regions/{region}/prices/min/{hours}", (string region, int hours, INordPoolService nordPoolService) =>
+{
+    return nordPoolService.GetCheapestContinuousPeriodForRegion(region, hours);
+})
+.WithName("Get cheapest period for region");
+
+app.MapGet("/regions/{region}/prices/max/{hours}", (string region, int hours, INordPoolService nordPoolService) =>
+{
+    return nordPoolService.GetCostliestContinuousPeriodForRegion(region, hours);
+})
+.WithName("Get costliest period for region");
+
+app.MapGet("regions/{region}/prices/current", (string region, INordPoolService nordPoolService) =>
+{
+    return nordPoolService.GetCurrentPriceForRegion(region);
+})
+.WithName("Get current price for region");
 
 app.Run();
